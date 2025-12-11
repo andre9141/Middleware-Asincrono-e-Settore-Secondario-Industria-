@@ -1,1 +1,30 @@
-{"nbformat":4,"nbformat_minor":0,"metadata":{"colab":{"provenance":[],"authorship_tag":"ABX9TyM1bCYULEtgWNvq1F4B8mZU"},"kernelspec":{"name":"python3","display_name":"Python 3"},"language_info":{"name":"python"}},"cells":[{"cell_type":"code","execution_count":null,"metadata":{"id":"y-wy9VyN366i"},"outputs":[],"source":["version: '3.8'\n","\n","services:\n","  # Servizio Middleware: RabbitMQ\n","  rabbitmq:\n","    image: rabbitmq:3-management\n","    container_name: factory_middleware\n","    hostname: rabbitmq-server\n","    ports:\n","      - \"5672:5672\"   # Porta per la comunicazione AMQP (Python <-> RabbitMQ)\n","      - \"15672:15672\" # Porta per la Dashboard Web di gestione\n","    environment:\n","      # Credenziali di default (in prod vanno cambiate!)\n","      RABBITMQ_DEFAULT_USER: user\n","      RABBITMQ_DEFAULT_PASS: password\n","    restart: always\n","    networks:\n","      - industrial_net\n","\n","  # Simulazione Servizio Consumer (opzionale, se vuoi lanciarlo via docker)\n","  consumer:\n","    build: .\n","    command: python backend_consumer.py\n","    depends_on:\n","      - rabbitmq\n","    networks:\n","      - industrial_net\n","\n","networks:\n","  industrial_net:\n","    driver: bridge"]}]}
+version: '3.8'
+
+services:
+  # Servizio Middleware: RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: factory_middleware
+    hostname: rabbitmq-server
+    ports:
+      - "5672:5672"     # Porta AMQP (Python <-> RabbitMQ)
+      - "15672:15672"   # Dashboard Web di gestione
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    restart: always
+    networks:
+      - industrial_net
+
+  # Servizio Consumer (opzionale) se vuoi farlo girare via Docker
+  consumer:
+    build: .
+    command: python backend_consumer.py
+    depends_on:
+      - rabbitmq
+    networks:
+      - industrial_net
+
+networks:
+  industrial_net:
+    driver: bridge
