@@ -1,1 +1,95 @@
-{"nbformat":4,"nbformat_minor":0,"metadata":{"colab":{"provenance":[],"toc_visible":true,"authorship_tag":"ABX9TyOWPyCj4Xyy9P/eOfXHKp1p"},"kernelspec":{"name":"python3","display_name":"Python 3"},"language_info":{"name":"python"}},"cells":[{"cell_type":"code","source":["import pika\n","import json\n","import time\n","import random\n","import datetime\n","\n","# --- CONFIGURAZIONE ---\n","# In un ambiente di produzione reale, questi parametri verrebbero caricati\n","# da variabili d'ambiente o da un vault sicuro per garantire la sicurezza (Security by Design).\n","RABBITMQ_HOST = 'localhost'\n","QUEUE_NAME = 'factory_data_secure'\n","\n","def get_connection():\n","    \"\"\"\n","    Stabilisce la connessione con il Middleware RabbitMQ.\n","    Implementa la logica di retry per resilienza in caso di mancata connessione iniziale.\n","    \"\"\"\n","    connection_params = pika.ConnectionParameters(host=RABBITMQ_HOST)\n","    # Esempio di predisposizione per SSL/TLS (come citato nella tesi):\n","    # ssl_options = ...\n","    # connection_params.ssl_options = ssl_options\n","    return pika.BlockingConnection(connection_params)\n","\n","def simulate_sensor_reading():\n","    \"\"\"\n","    Genera dati simulati verosimili per un macchinario industriale.\n","    Include temperatura, vibrazione e stato operativo.\n","    \"\"\"\n","    return {\n","        \"sensor_id\": \"PRESS_01_A\",\n","        \"timestamp\": datetime.datetime.now().isoformat(),\n","        \"temperature_celsius\": round(random.uniform(50.0, 120.0), 2),\n","        \"vibration_level\": round(random.uniform(0.1, 5.0), 2),\n","        \"status\": \"OPERATIONAL\"\n","    }\n","\n","def publish_messages():\n","    \"\"\"\n","    Funzione principale che invia messaggi asincroni alla coda.\n","    Il produttore NON aspetta che il messaggio venga letto (disaccoppiamento).\n","    \"\"\"\n","    try:\n","        connection = get_connection()\n","        channel = connection.channel()\n","\n","        # Dichiariamo la coda come 'durable=True'.\n","        # Questo garantisce la persistenza dei messaggi anche in caso di crash del broker,\n","        # soddisfacendo il requisito di resilienza citato nell'elaborato.\n","        channel.queue_declare(queue=QUEUE_NAME, durable=True)\n","\n","        print(f\"[*] Connesso al middleware. Invio dati sensori su '{QUEUE_NAME}'...\")\n","\n","        while True:\n","            data = simulate_sensor_reading()\n","            message_body = json.dumps(data)\n","\n","            # Simulazione di un'anomalia critica (Temperatura eccessiva)\n","            if data['temperature_celsius'] > 110.0:\n","                properties = pika.BasicProperties(\n","                    delivery_mode=2,  # Rende il messaggio persistente\n","                    priority=2        # Alta priorità per allarmi sicurezza\n","                )\n","                print(f\"[!] ALLARME CRITICO RILEVATO: {data['temperature_celsius']}°C\")\n","            else:\n","                properties = pika.BasicProperties(delivery_mode=2)\n","\n","            # Pubblicazione del messaggio\n","            channel.basic_publish(\n","                exchange='',\n","                routing_key=QUEUE_NAME,\n","                body=message_body,\n","                properties=properties\n","            )\n","\n","            print(f\"[x] Inviato: {data['temperature_celsius']}°C - Vibrazione: {data['vibration_level']}\")\n","\n","            # Simula la frequenza di campionamento del sensore (es. ogni 2 secondi)\n","            time.sleep(2)\n","\n","    except Exception as e:\n","        print(f\"[ERROR] Errore nella connessione al middleware: {e}\")\n","    finally:\n","        if 'connection' in locals() and connection.is_open:\n","            connection.close()\n","\n","if __name__ == \"__main__\":\n","    publish_messages()"],"metadata":{"id":"-uVNkwfd4ePz"},"execution_count":null,"outputs":[]}]}
+import pika
+import json
+import time
+import random
+import datetime
+
+# --- CONFIGURAZIONE ---
+# In un ambiente reale, questi parametri verrebbero caricati
+# da variabili d'ambiente o da un vault sicuro.
+RABBITMQ_HOST = "localhost"
+QUEUE_NAME = "factory_data_secure"
+
+
+def get_connection():
+    """
+    Stabilisce la connessione con RabbitMQ.
+    Implementa la logica di retry (predisposizione) per resilienza.
+    """
+    connection_params = pika.ConnectionParameters(host=RABBITMQ_HOST)
+
+    # Esempio di predisposizione per SSL/TLS (citabile in tesi):
+    # ssl_options = ...
+    # connection_params.ssl_options = ssl_options
+
+    return pika.BlockingConnection(connection_params)
+
+
+def simulate_sensor_reading():
+    """
+    Genera dati simulati del macchinario industriale:
+    temperatura, vibrazione e stato operativo.
+    """
+    return {
+        "sensor_id": "PRESS_01_A",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "temperature_celsius": round(random.uniform(50.0, 120.0), 2),
+        "vibration_level": round(random.uniform(0.1, 5.0), 2),
+        "status": "OPERATIONAL"
+    }
+
+
+def publish_messages():
+    """
+    Pubblica messaggi asincroni sulla coda RabbitMQ.
+    Il produttore NON attende la loro elaborazione (disaccoppiamento).
+    """
+    try:
+        connection = get_connection()
+        channel = connection.channel()
+
+        # Coda durevole → messaggi persistenti (resilienza)
+        channel.queue_declare(queue=QUEUE_NAME, durable=True)
+
+        print(f"[*] Connesso al middleware. Invio dati sensori su '{QUEUE_NAME}'...")
+
+        while True:
+            data = simulate_sensor_reading()
+            message_body = json.dumps(data)
+
+            # Allarme critico → messaggio con priorità alta
+            if data["temperature_celsius"] > 110.0:
+                properties = pika.BasicProperties(
+                    delivery_mode=2,  # Persistente
+                    priority=2        # Alta priorità
+                )
+                print(f"[!] ALLARME CRITICO: {data['temperature_celsius']}°C")
+            else:
+                properties = pika.BasicProperties(delivery_mode=2)
+
+            # Pubblicazione messaggio
+            channel.basic_publish(
+                exchange="",
+                routing_key=QUEUE_NAME,
+                body=message_body,
+                properties=properties
+            )
+
+            print(
+                f"[x] Inviato: {data['temperature_celsius']}°C - "
+                f"Vibrazione: {data['vibration_level']}"
+            )
+
+            # Frequenza simulata del sensore
+            time.sleep(2)
+
+    except Exception as e:
+        print(f"[ERROR] Errore nella connessione RabbitMQ: {e}")
+
+    finally:
+        if "connection" in locals() and connection.is_open:
+            connection.close()
+
+
+if __name__ == "__main__":
+    publish_messages()
